@@ -1,0 +1,15 @@
+def Seperation(self, neighbours):
+        count = len(neighbours)
+
+        total_disp = Vector2(0, 0)
+        for boid in neighbours:
+            x = boid.pos.x**(-1)
+            y = boid.pos.y**(-1)
+
+            total_disp += self.pos - Vector2(x, y)
+        avg_disp = total_disp / count
+        return avg_disp
+
+for some reason becomes alignment
+
+when getting teleported we lose connection with birds that are supposed to be neighbours.

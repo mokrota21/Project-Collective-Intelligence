@@ -14,8 +14,10 @@ class FlockingConfig(Config):
     cohesion_weight: float = 0.5
     separation_weight: float = 100.0
     maximum_vel: float = 20
-    leader_birds = 10
-    to_mouse = 1
+    left_bird, left_pos = None, Vector2(0, 0)
+    right_bird, right_pos = None, Vector2(-1, -1)
+    # leader_birds = 10
+    # to_mouse = 1
 
     # These should be left as is.
     delta_time: float = 0.5                                   # To learn more https://gafferongames.com/post/integration_basics/ 
@@ -93,6 +95,10 @@ class Bird(Agent):
         self.pos += self.move * self.config.delta_time
 
     def change_position(self):
+        if self.id == 0:
+            self.config.left_bird = self
+        elif self.id == 1:
+            self.config.right_birdf = self
         self.there_is_no_escape()
 
         self.movement_flock()
@@ -119,6 +125,7 @@ class FlockingLive(Simulation):
             self.config.cohesion_weight += by
         elif self.selection == Selection.SEPARATION:
             self.config.separation_weight += by
+        
 
     def before_update(self):
         super().before_update()
@@ -135,6 +142,10 @@ class FlockingLive(Simulation):
                     self.selection = Selection.COHESION
                 elif event.key == pg.K_3:
                     self.selection = Selection.SEPARATION
+                elif event.key == pg.K_s:
+                    self.config.left_bird.pos = self.config.left_pos
+                    self.config.right_bird.pos = self.config.right_pos
+                    
 
         a, c, s = self.config.weights()
         print(f"A: {a:.1f} - C: {c:.1f} - S: {s:.1f}")
@@ -149,6 +160,6 @@ class FlockingLive(Simulation):
             seed=1,
         )
     )
-    .batch_spawn_agents(50, Bird, images=["images/bird.png"])
+    .batch_spawn_agents(2, Bird, images=["images/bird.png"])
     .run()
 )
