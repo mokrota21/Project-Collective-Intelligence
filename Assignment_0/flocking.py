@@ -10,9 +10,9 @@ import random
 @dataclass
 class FlockingConfig(Config):
     # You can change these for different starting weights
-    alignment_weight: float = 1.0
+    alignment_weight: float = 1.5
     cohesion_weight: float = 0.5
-    separation_weight: float = 0.5
+    separation_weight: float = 100.0
     maximum_vel: float = 20
     leader_birds = 10
     to_mouse = 1
@@ -43,14 +43,19 @@ class Bird(Agent):
         for boid in neighbours:
             total_p += boid.pos
         avg_p = total_p / count
-        return avg_p - self.pos - self.move
+        
+        return avg_p - self.pos
+        # return avg_p - self.pos - self.move
     
     def Seperation(self, neighbours):
         count = len(neighbours)
 
         total_disp = Vector2(0, 0)
         for boid in neighbours:
-            total_disp += boid.pos - self.pos
+            boid_pos = self.pos - boid.pos
+            boid_pos = boid_pos.normalize() * (boid_pos.length() - 5)**(-2)
+
+            total_disp += boid_pos
         avg_disp = total_disp / count
         return avg_disp
     
@@ -73,7 +78,8 @@ class Bird(Agent):
     
     def maxVel(self):
         max_v = self.config.maximum_vel
-        self.move = self.move.normalize() * max_v
+        if self.move != Vector2(0, 0):
+            self.move = self.move.normalize() * max_v
 
     def movement_flock(self):
         self.move += self.Force()
@@ -90,8 +96,8 @@ class Bird(Agent):
         self.there_is_no_escape()
 
         self.movement_flock()
-        if self.id < self.config.leader_birds:
-            self.movement_pos(Vector2(pg.mouse.get_pos()))
+        # if self.id < self.config.leader_birds:
+        # self.movement_pos(Vector2(pg.mouse.get_pos()))
         self.position()
 
 
