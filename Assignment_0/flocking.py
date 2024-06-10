@@ -13,9 +13,10 @@ class FlockingConfig(Config):
     alignment_weight: float = 0.35
     cohesion_weight: float = 0.3
     separation_weight: float = 0.5
-    maximum_vel: float = 10
+    maximum_vel: float = 1
     leader_birds: int = 1
     to_mouse: int = 0
+    min_dist = 20
     #left_bird, left_pos = None, Vector2(0, 0)
     #right_bird, right_pos = None, Vector2(-1, -1)
 
@@ -51,11 +52,15 @@ class Bird(Agent):
     
     def Seperation(self, neighbours):
         count = len(neighbours)
+        min_dist = self.config.min_dist
 
         total_disp = Vector2(0, 0)
         for boid in neighbours:
             boid_pos = self.pos - boid.pos
-            boid_pos = boid_pos.normalize() * (boid_pos.length() - 5)**(-2)
+            if boid_pos.length() <= min_dist:
+                boid_pos = boid_pos.normalize() * 10000
+            else:
+                boid_pos = boid_pos.normalize() * (min_dist - boid_pos.length())**(-2) * (int(min_dist - boid_pos.length() > 0) * 2 - 1)
 
             total_disp += boid_pos
         avg_disp = total_disp / count
@@ -160,6 +165,6 @@ class FlockingLive(Simulation):
             seed=1,
         )
     )
-    .batch_spawn_agents(50, Bird, images=["images/bird.png"])
+    .batch_spawn_agents(200, Bird, images=["images/bird.png"])
     .run()
 )
