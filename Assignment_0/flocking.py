@@ -55,14 +55,10 @@ class Bird(Agent):
         total_disp = Vector2(0, 0)
         for boid in neighbours:
             boid_pos = self.pos - boid.pos
-<<<<<<< Updated upstream
-            boid_pos = boid_pos.normalize() * (boid_pos.length() - 5)**(-2)
-=======
             if boid_pos.length() <= min_dist:
                 boid_pos = boid_pos.normalize() * 10000
             else:
                 boid_pos = boid_pos.normalize() * (min_dist - boid_pos.length())**(-3)
->>>>>>> Stashed changes
 
             total_disp += boid_pos
         avg_disp = total_disp / count
