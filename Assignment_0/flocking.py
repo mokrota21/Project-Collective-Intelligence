@@ -10,14 +10,14 @@ import random
 @dataclass
 class FlockingConfig(Config):
     # You can change these for different starting weights
-    alignment_weight: float = 1.5
-    cohesion_weight: float = 0.5
-    separation_weight: float = 100.0
-    maximum_vel: float = 20
-    left_bird, left_pos = None, Vector2(0, 0)
-    right_bird, right_pos = None, Vector2(-1, -1)
-    # leader_birds = 10
-    # to_mouse = 1
+    alignment_weight: float = 0.35
+    cohesion_weight: float = 0.3
+    separation_weight: float = 0.5
+    maximum_vel: float = 10
+    leader_birds: int = 1
+    to_mouse: int = 0
+    #left_bird, left_pos = None, Vector2(0, 0)
+    #right_bird, right_pos = None, Vector2(-1, -1)
 
     # These should be left as is.
     delta_time: float = 0.5                                   # To learn more https://gafferongames.com/post/integration_basics/ 
@@ -102,8 +102,8 @@ class Bird(Agent):
         self.there_is_no_escape()
 
         self.movement_flock()
-        # if self.id < self.config.leader_birds:
-        # self.movement_pos(Vector2(pg.mouse.get_pos()))
+        if self.id < self.config.leader_birds:
+            self.movement_pos(Vector2(pg.mouse.get_pos()))
         self.position()
 
 
@@ -156,10 +156,10 @@ class FlockingLive(Simulation):
         FlockingConfig(
             image_rotation=True,
             movement_speed=1,
-            radius=50,
+            radius=200,
             seed=1,
         )
     )
-    .batch_spawn_agents(2, Bird, images=["images/bird.png"])
+    .batch_spawn_agents(50, Bird, images=["images/bird.png"])
     .run()
 )
