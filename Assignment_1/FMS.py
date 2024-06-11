@@ -17,6 +17,7 @@ class FMSConfig(Config):
     speed: float = 30.0
     p_join: float = 0.8
     p_leave: float = 0.4
+    p_join_no_site: float = 1 / COUNT
     D: int = 100
 
 def wander(self):
@@ -67,6 +68,37 @@ def leave(self):
     self.move = self.move.normalize() * self.config.speed
     self.pos += self.move
     self.join_t -= 1
+
+def wander_no_site(self):
+    if random.uniform(0, 1) < self.prob_join_no_site():
+        self.last_site = self.on_site_id()
+        self.enter_site = Vector2(self.pos.x, self.pos.y)
+        self.escape_site = None
+        self.current = "Still"
+        return
+
+    movement = Vector2(random.uniform(-1, 1), random.uniform(-1, 1)).normalize() * self.config.speed
+    self.move = movement
+    self.pos += self.move
+
+def still_no_site(self):
+    leave = False
+    if self.still_i % self.config.D == 0:
+        leave = random.uniform(0.0, 1.0) < self.leave_prob_no_site()
+
+    if leave:
+        self.continue_movement()
+        self.current = "Leave"
+        return
+
+def leave_no_site(self):
+    if self.join_t == 0:
+        self.current = "Wander"
+        return
+    
+    self.move = self.move.normalize() * self.config.speed
+    self.pos += self.move
+    self.join_t -= 1
     
 
 class Cockroach(Agent):
@@ -74,14 +106,27 @@ class Cockroach(Agent):
     in_site: bool = False
     last_site = None
     current = "Wander"
-    functions = {"Wander": wander, "Join": join, "Still": still, "Leave": leave}
+    functions_norm = {"Wander": wander, "Join": join, "Still": still, "Leave": leave}
+    functions_no_site = {"Wander": wander_no_site, "Still": still_no_site, "Leave": leave_no_site}
     join_t = 0
     still_i = 0
     enter_site = None
     escape_site = None
 
+    def prob_join_no_site(self):
+        count = self.in_proximity_performance().count()
+        if count != 0:
+            return self.config.p_join_no_site * ((count) ** (1/2))
+        return self.config.p_join_no_site
+
     def leave_prob(self):
         count = INSIDE[self.last_site]
+        if count == 0:
+            return self.config.p_leave
+        return ((count ** (-2)) * self.config.p_leave)
+    
+    def leave_prob_no_site(self):
+        count = self.in_proximity_performance().count()
         if count == 0:
             return self.config.p_leave
         return ((count ** (-2)) * self.config.p_leave)
@@ -107,7 +152,7 @@ class Cockroach(Agent):
             
         self.there_is_no_escape()
 
-        self.functions[self.current](self)
+        self.functions_no_site[self.current](self)
 
         # self.move = Vector2(pg.mouse.get_pos()[0], pg.mouse.get_pos()[1]) - self.pos
         # self.pos += self.move
@@ -133,8 +178,8 @@ config = FMSConfig(
     FMSLive(
         config
     )
-    .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
-    .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
+    # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
+    # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
     .batch_spawn_agents(COUNT, Cockroach, images=["images/red.png"])
     .run()
 )
