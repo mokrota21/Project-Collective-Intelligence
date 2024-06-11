@@ -89,6 +89,7 @@ def still_no_site(self):
     if leave:
         self.continue_movement()
         self.current = "Leave"
+        self.join_t = 5
         return
 
 def leave_no_site(self):
