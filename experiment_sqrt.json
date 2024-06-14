@@ -1,0 +1,42 @@
+[
+    {
+        "count": 500,
+        "time_in_D": 25
+    },
+    {
+        "count": 1000,
+        "time_in_D": 26
+    },
+    {
+        "count": 1500,
+        "time_in_D": 25
+    },
+    {
+        "count": 2000,
+        "time_in_D": 31
+    },
+    {
+        "count": 2500,
+        "time_in_D": 30
+    },
+    {
+        "count": 3000,
+        "time_in_D": 31
+    },
+    {
+        "count": 3500,
+        "time_in_D": 27
+    },
+    {
+        "count": 4000,
+        "time_in_D": 34
+    },
+    {
+        "count": 4500,
+        "time_in_D": 28
+    },
+    {
+        "count": 5000,
+        "time_in_D": 27
+    }
+]
