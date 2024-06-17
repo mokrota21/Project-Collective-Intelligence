@@ -58,27 +58,26 @@ class WanderLeo(LeoAction):
         prey = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).first()
         ag.current_prey = prey
         hunt_p = [HuntLeo(), int(prey is not None) * 0.99]
-        nat_death_p = [DieLeo(), max(config.nat_death, int(ag.E == 0))]
+        nat_death_p = [DieLeo(), max(int(uniform(0, 1) < config.nat_death), int(ag.E == 0))]
         wander_p = [WanderLeo(), 1.0]
-
-        # print(nat_death_p)
 
         return [nat_death_p, hunt_p, wander_p]
 
 class HuntLeo(LeoAction):
-
     def do(self, ag):
         prey_move = ag.current_prey.pos - ag.pos
         prey_move = prey_move.normalize() * config.hunt_speed
-        ag.move = prey_dir
+        ag.move = prey_move
         ag.E -= config.still_weight + config.walk_weight
+        if ag.E < 0:
+            ag.E = 0
 
     def switch(self, ag):
         ag.hunt_timer = config.hunt_timer
 
     def prob(self, ag):
-        nat_death_p = [DieLeo(), max(config.nat_death, ag.E == 0)]
-        eat_p = [EatLeo(), int((agg.pos - agg.current_prey.pos).length() <= 5)]
+        nat_death_p = [DieLeo(), max(int(uniform(0, 1) < config.nat_death), int(ag.E == 0))]
+        eat_p = [EatLeo(), int((ag.pos - ag.current_prey.pos).length() <= 5)]
         hunt_p = [HuntLeo(), ag.hunt_timer > 0]
         wander_p = [WanderLeo(), 1.0]
 
@@ -86,16 +85,17 @@ class HuntLeo(LeoAction):
 
 class EatLeo(LeoAction):
     def do(self, ag):
-        ag.move = 0
-        ag.E += config.eat_gain / config.eat_timer
+        print('leo eating')
+        ag.move = Vector2(0, 0)
+        ag.E += config.eat_weight / config.eat_timer
         ag.eat_timer -= 1
 
     def switch(self, ag):
         ag.eat_timer = config.eat_timer
 
     def prob(self, ag):
-        nat_death_p = [DieLeo(), max(config.nat_death, ag.E == 0)]
-        eat_p = [EatLeo(), ag.eat_timer == 0]
+        nat_death_p = [DieLeo(), max(int(uniform(0, 1) < config.nat_death), int(ag.E == 0))]
+        eat_p = [EatLeo(), ag.eat_timer != 0]
         wander_p = [WanderLeo(), 1]
 
         return [nat_death_p, eat_p, wander_p]
@@ -126,8 +126,7 @@ class Leopard(Agent, FMSPriority):
     current_prey = None
 
     def change_position(self):
-        # print(self.E, self.current_action)
-        # self.there_is_no_escape()
+        self.there_is_no_escape()
         self.do()
         self.pos += self.move
 
@@ -181,9 +180,11 @@ class WanderSheep(SheepAction):
         grass = ag.in_proximity_accuracy().without_distance().filter_kind(Grass).first()
         ag.current_prey = grass
         ag.current_hunter = hunter
-        run_p = [RunSheep(), int(hunter is not None) * 0.99 * (1 - hunter.config.stealth)]
+        run_p = [RunSheep(), 0]
+        if hunter is not None:
+            run_p = [RunSheep(), 0.99 * (1 - hunter.config.stealth)]
         hunt_p = [HuntSheep(), int(grass is not None) * 0.99]
-        nat_death_p = [DieSheep(), max(config.nat_death, int(ag.E == 0))]
+        nat_death_p = [DieSheep(), max(int(uniform(0, 1) < config.nat_death), int(ag.E == 0))]
         wander_p = [WanderSheep(), 1.0]
 
         return [nat_death_p, run_p, hunt_p, wander_p]
@@ -196,7 +197,7 @@ class RunSheep(SheepAction):
         pass
 
     def prob(self, ag):
-        nat_death_p = [DieSheep(), max(config.nat_death, ag.E == 0)]
+        nat_death_p = [DieSheep(), max(int(uniform(0, 1) < config.nat_death), int(ag.E == 0))]
         hunter = ag.in_proximity_accuracy().without_distance().filter_kind(Leopard).first()
         run_p = [RunSheep(), int(hunter is not None)]
         wander_p = [WanderSheep(), 1]
@@ -207,19 +208,19 @@ class HuntSheep(SheepAction):
     def do(self, ag):
         prey_move = ag.current_prey.pos - ag.pos
         prey_move = prey_move.normalize() * config.hunt_speed
-        ag.move = prey_dir
+        ag.move = prey_move
         ag.E -= config.still_weight + config.walk_weight
 
     def switch(self, ag):
         ag.hunt_timer = config.hunt_timer
 
     def prob(self, ag):
-        nat_death_p = [DieSheep(), max(config.nat_death, ag.E == 0)]
-        eat_p = [EatSheep(), int((agg.pos - agg.current_prey.pos).length <= 5)]
+        nat_death_p = [DieSheep(), max(int(uniform(0, 1) < config.nat_death), int(ag.E == 0))]
+        eat_p = [EatSheep(), int((ag.pos - ag.current_prey.pos).length <= 5)]
         hunt_p = [HuntSheep(), ag.hunt_timer > 0]
         wander_p = [WanderSheep(), 1.0]
 
-        return [nat_death_p, hunt_p, wander_p]
+        return [nat_death_p, eat_p, hunt_p, wander_p]
 
 class EatSheep(SheepAction):
     def do(self, ag):
@@ -231,7 +232,7 @@ class EatSheep(SheepAction):
         ag.eat_timer = config.eat_timer
 
     def prob(self, ag):
-        nat_death_p = [DieSheep(), max(config.nat_death, ag.E == 0)]
+        nat_death_p = [DieSheep(), max(int(uniform(0, 1) < config.nat_death), int(ag.E == 0))]
         eat_p = [EatSheep(), ag.eat_timer == 0]
         wander_p = [WanderSheep(), 1]
 
@@ -243,7 +244,7 @@ class DieSheep(DieLeo):
 
 class Sheep(Agent, FMSPriority):
     config = SheepConfig()
-    current_action = WanderLeo()
+    current_action = DieSheep()
     E: float = 1.0
 
     eat_timer = config.eat_timer
@@ -253,6 +254,7 @@ class Sheep(Agent, FMSPriority):
     current_prey = None
 
     def change_position(self):
+        self.there_is_no_escape()
         self.do()
         self.pos += self.move
 
@@ -268,16 +270,22 @@ class FMSLive(Simulation):
 config = LeopardConfig(
             image_rotation=True,
             movement_speed=1,
-            radius=50,
+            radius=500,
             seed=1,
         )
+config_sheep = SheepConfig(
+    image_rotation=True,
+    movement_speed=1,
+    radius=50,
+    seed=1
+)
 (
     FMSLive(
         config
     )
     # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
     # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
-    .batch_spawn_agents(LEO_COUNT, Leopard, images=["images/red.png"])
-    .batch_spawn_agents(SHEEP_COUNT, Sheep, images=['images/green.png'])
+    .batch_spawn_agents(1, Leopard, images=["images/red.png"])
+    .batch_spawn_agents(5, Sheep, images=['images/green.png'])
     .run()
 )

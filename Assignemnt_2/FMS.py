@@ -12,7 +12,6 @@ class FMSPriority():
         return distr[-1][0]
 
     def do(self):
-        print(self.current_action)
         self.current_action.do(self)
         prob_distr = self.current_action.prob(self)
         new_action = self.sample(prob_distr)
