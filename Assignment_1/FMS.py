@@ -18,6 +18,7 @@ class FMSConfig(Config):
     p_join: float = 0.8
     p_leave: float = 0.4
     p_join_no_site: float = 1 / COUNT
+    t_join_no_site: int = 0
     D: int = 100
 
 def wander(self):
@@ -74,12 +75,23 @@ def wander_no_site(self):
         self.last_site = self.on_site_id()
         self.enter_site = Vector2(self.pos.x, self.pos.y)
         self.escape_site = None
-        self.current = "Still"
+        self.current = "Join"
         return
 
     movement = Vector2(random.uniform(-1, 1), random.uniform(-1, 1)).normalize() * self.config.speed
     self.move = movement
     self.pos += self.move
+
+def join_no_site(self):
+        if self.join_t == self.config.t_join_no_site is not None:
+            # self.randomize_site()
+            self.still_i = 0
+            self.current = "Still"
+            return
+
+        self.move = self.move.normalize() * self.config.speed
+        self.pos += self.move
+        self.join_t += 1
 
 def still_no_site(self):
     leave = False
@@ -108,7 +120,7 @@ class Cockroach(Agent):
     last_site = None
     current = "Wander"
     functions_norm = {"Wander": wander, "Join": join, "Still": still, "Leave": leave}
-    functions_no_site = {"Wander": wander_no_site, "Still": still_no_site, "Leave": leave_no_site}
+    functions_no_site = {"Wander": wander_no_site, "Join": join_no_site, "Still": still_no_site, "Leave": leave_no_site}
     join_t = 0
     still_i = 0
     enter_site = None
