@@ -15,11 +15,17 @@ SHEEP_COUNT = 100
 @dataclass
 class FMSConfig(Config):
     leo_speed_wander: float = 1.0
+    leo_hunt_speed: float = 3.0
+
+    sheep_speed_wander: float = 1.0
+    sheep_hunt_speed: float = 2.0
+    sheep_run_speed: float = 5.0
+    sheep_acceleration: float = 0.01
+
     leo_nat_death: float = (10000) ** -1
     leo_rot_timer: int = 1000
     leo_hunt_timer: int = 100
-    leo_hunt_speed: float = 3.0
-    leo_stealth: float = 0.3
+    leo_stealth: float = 0.01
     leo_eat_speed: float = 0.4
 
     leo_still_weight: float = 0.0001
@@ -27,14 +33,10 @@ class FMSConfig(Config):
 
     leo_hungry: float = 0.70
 
-    sheep_speed_wander: float = 1.0
     sheep_nat_death: float = (10000) ** -1
     sheep_rot_timer: int = 1000
     sheep_run_timer: int = 100
-    sheep_hunt_speed: float = 2.0
-    sheep_run_speed: float = 3.0
     sheep_eat_timer: int = 3
-    sheep_acceleration: float = 0.5
 
     sheep_still_weight: float = 0.0001
     sheep_walk_weight: float = 0.001
@@ -56,6 +58,18 @@ class DieLeo():
 class Sheep(Agent):
     pass
 class Leopard(Agent):
+    pass
+class WanderSheep():
+    pass
+class RunSheep():
+    pass
+class HuntSheep():
+    pass
+class EatSheep():
+    pass
+class DieSheep():
+    pass
+class Grass(Agent):
     pass
 
 class WanderLeo(LeoAction):
@@ -100,7 +114,7 @@ class HuntLeo(LeoAction):
 
 class EatLeo(LeoAction):
     def do(self, ag: Leopard):
-        # print('leo eating')
+        ag.current_prey.current_action = DieSheep()
         ag.move = Vector2(0, 0)
         change_E = min(config.leo_eat_speed, ag.current_prey.E)
         ag.E = min(ag.E + change_E, 1.0)
@@ -154,20 +168,6 @@ class SheepAction():
     def __init__(self, config = FMSConfig()):
         self.config = config
 
-class WanderSheep():
-    pass
-class RunSheep():
-    pass
-class HuntSheep():
-    pass
-class EatSheep():
-    pass
-class DieSheep():
-    pass
-class Grass(Agent):
-    pass
-
-
 class WanderSheep(SheepAction):
     def do(self, ag):
         ag.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * config.sheep_speed_wander * uniform(0, (1 - ag.E) ** 2)
@@ -186,7 +186,7 @@ class WanderSheep(SheepAction):
         ag.current_hunter = hunter
         run_p = [RunSheep(), 0]
         if hunter is not None:
-            run_p = [RunSheep(), (1 - hunter.config.leo_stealth)]
+            run_p = [RunSheep(), hunter.config.leo_stealth]
         hunt_p = [HuntSheep(), int(grass is not None) * 0.99]
         nat_death_p = [DieSheep(), max(int(uniform(0, 1) < config.sheep_nat_death), int(ag.E == 0))]
         wander_p = [WanderSheep(), 1.0]
@@ -198,7 +198,8 @@ class RunSheep(SheepAction):
         hunter = ag.in_proximity_accuracy().without_distance().filter_kind(Leopard).first()
         if hunter is not None:
             # ag.move = (ag.current_hunter.pos - ag.pos).normalize() * (self.config.sheep_run_speed * (-1))
-            ag.move = ag.move.normalize() * min(1 + self.config.sheep_acceleration, self.config.sheep_run_speed)
+            l = ag.move.length()
+            ag.move = ag.move.normalize() * min(l + self.config.sheep_acceleration, self.config.sheep_run_speed)
         else:
             ag.run_timer -= 1
 
@@ -291,7 +292,7 @@ class FMSLive(Simulation):
 config = FMSConfig(
             image_rotation=True,
             movement_speed=1,
-            radius=300,
+            radius=3000,
             seed=1,
         )
 (
@@ -301,6 +302,6 @@ config = FMSConfig(
     # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
     # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
     .batch_spawn_agents(1, Leopard, images=["images/red.png"])
-    .batch_spawn_agents(5, Sheep, images=['images/green.png'])
+    .batch_spawn_agents(1, Sheep, images=['images/green.png'])
     .run()
 )
