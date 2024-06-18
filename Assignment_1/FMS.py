@@ -165,7 +165,7 @@ class Cockroach(Agent):
             
         self.there_is_no_escape()
 
-        self.functions_no_site[self.current](self)
+        self.functions_norm[self.current](self)
 
         # self.move = Vector2(pg.mouse.get_pos()[0], pg.mouse.get_pos()[1]) - self.pos
         # self.pos += self.move
@@ -191,8 +191,8 @@ config = FMSConfig(
     FMSLive(
         config
     )
-    # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
-    # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
+    .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
+    .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
     .batch_spawn_agents(COUNT, Cockroach, images=["images/red.png"])
     .run()
 )
