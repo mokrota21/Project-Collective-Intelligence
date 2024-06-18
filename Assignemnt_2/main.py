@@ -5,6 +5,7 @@ import pygame as pg
 from pygame.math import Vector2
 from vi import Agent, Simulation
 from vi.config import Config, dataclass, deserialize
+from numpy import cos
 
 LEO_COUNT = 10
 
@@ -23,6 +24,9 @@ class FMSConfig(Config):
     sheep_hunt_speed: float = 2.0
     sheep_run_speed: float = 5.0
     sheep_acceleration: float = 0.01
+
+    leo_vision_field: float = cos(100)
+    sheep_vision_field: float = cos(145)
 
     leo_nat_death: float = (10000) ** -1
     leo_rot_timer: int = 1000
@@ -51,6 +55,23 @@ class FMSConfig(Config):
     grass_still_weight: float = 0.00001
 
     join_t_max: int = 30
+
+def can_see_leo(leo, sheep):
+    v1 = leo.move
+    v2 = sheep.pos - leo.pos
+    if v1.length() == 0:
+        return False
+    leo_sheep_cos = v1.dot(v2) / v1.length() / v2.length()
+    return leo_sheep_cos > leo.config.leo_vision_field
+
+
+def can_see_sheep(sheep, leo):
+    v1 = sheep.move
+    v2 = leo.pos - sheep.pos
+    if v1.length() == 0:
+        return False
+    sheep_leo_cos = v1.dot(v2) / v1.length() / v2.length()
+    return sheep_leo_cos > sheep.config.sheep_vision_field
 
 class LeoAction():
     def __init__(self, config = FMSConfig()):
@@ -97,10 +118,12 @@ class WanderLeo(LeoAction):
         return
 
     def prob(self, ag):
-        prey = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).first()
+        prey = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).filter(lambda sheep: can_see_leo(ag, sheep)).first()
         ag.current_prey = prey
-        hungry = ag.E < self.config.leo_hungry
-        hunt_p = [HuntLeo(), int(hungry and prey is not None) * 0.99]
+        hunt_p = [HuntLeo(), 0]
+        if prey is not None:
+            hungry = ag.E < self.config.leo_hungry
+            hunt_p = [HuntLeo(), int(hungry) * 0.99]
         nat_death_p = [DieLeo(), self.config.leo_nat_death]
         wander_p = [WanderLeo(), 1.0]
 
@@ -221,7 +244,7 @@ class WanderSheep(SheepAction):
         return
 
     def prob(self, ag):
-        hunter = ag.in_proximity_accuracy().without_distance().filter_kind(Leopard).first()
+        hunter = ag.in_proximity_accuracy().without_distance().filter_kind(Leopard).filter(lambda leo: can_see_sheep(ag, leo)).first()
         grass = ag.in_proximity_accuracy().without_distance().filter_kind(Grass).first()
         ag.current_prey = grass
         ag.current_hunter = hunter
