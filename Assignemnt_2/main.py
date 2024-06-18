@@ -16,8 +16,8 @@ SHEEP_COUNT = 100
 class FMSConfig(Config):
     direction_change: int = 100
 
-    leo_speed_wander: float = 1.0
-    leo_hunt_speed: float = 3.0
+    leo_speed_wander: float = 2.0
+    leo_hunt_speed: float = 5.0
 
     sheep_speed_wander: float = 1.0
     sheep_hunt_speed: float = 2.0
@@ -47,6 +47,8 @@ class FMSConfig(Config):
     sheep_still_weight: float = 0.0001
     sheep_walk_weight: float = 0.001
     sheep_eat_weight: float = 0.04
+
+    grass_still_weight: float = 0.00001
 
     join_t_max: int = 30
 
@@ -84,7 +86,8 @@ class WanderLeo(LeoAction):
     def do(self, ag):
         if ag.timer % self.config.direction_change == 0:
             ag.timer = 1
-            ag.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * config.leo_speed_wander * uniform(0, (1 - ag.E) ** 2)
+            ag.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * config.leo_speed_wander * uniform(0, (1 - ag.E))
+            print(ag.move)
         ag.E = ag.E - config.leo_still_weight - config.leo_walk_weight
         if ag.E < 0:
             ag.E = 0
@@ -96,7 +99,8 @@ class WanderLeo(LeoAction):
     def prob(self, ag):
         prey = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).first()
         ag.current_prey = prey
-        hunt_p = [HuntLeo(), int(ag.E < self.config.leo_hungry) * int(prey is not None) * 0.99]
+        hungry = ag.E < self.config.leo_hungry
+        hunt_p = [HuntLeo(), int(hungry and prey is not None) * 0.99]
         nat_death_p = [DieLeo(), self.config.leo_nat_death]
         wander_p = [WanderLeo(), 1.0]
 
@@ -147,6 +151,7 @@ class EatLeo(LeoAction):
 
 class DieLeo(LeoAction):
     def do(self, ag):
+        ag.change_image(1)
         ag.move = Vector2(0, 0)
         ag.death_timer -= 1
         if ag.death_timer == 0:
@@ -174,6 +179,7 @@ class Leopard(Agent, FMSPriority):
         self.there_is_no_escape()
         self.do()
         self.pos += self.move
+        self.timer += 1
         if self.E == 0:
             self.kill()
 
@@ -205,7 +211,7 @@ class WanderSheep(SheepAction):
     def do(self, ag):
         if ag.timer % self.config.direction_change == 0:
             ag.timer = 1
-            ag.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * self.config.sheep_speed_wander 
+            ag.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * self.config.sheep_speed_wander * uniform(0, (1 - ag.E) ** 2)
         ag.E = ag.E - config.sheep_still_weight - config.sheep_walk_weight
         if ag.E < 0:
             ag.E = 0
@@ -234,7 +240,10 @@ class RunSheep(SheepAction):
         if hunter is not None:
             # ag.move = (ag.current_hunter.pos - ag.pos).normalize() * (self.config.sheep_run_speed * (-1))
             l = ag.move.length()
-            ag.move = ag.move.normalize() * min(l + self.config.sheep_acceleration, self.config.sheep_run_speed)
+            if l == 0:
+                ag.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * self.config.sheep_run_speed * 0.1
+            else:
+                ag.move = ag.move.normalize() * min(l + self.config.sheep_acceleration, self.config.sheep_run_speed)
         else:
             ag.run_timer -= 1
 
@@ -299,6 +308,7 @@ class EatSheep(SheepAction):
 
 class DieSheep(DieLeo):
     def do(self, ag):
+        ag.change_image(1)
         ag.move = Vector2(0, 0)
         ag.death_timer -= 1
         if ag.death_timer == 0:
@@ -308,7 +318,7 @@ class DieSheep(DieLeo):
         return
     
     def prob(self, ag):
-        return [[DieLeo(), 1]]
+        return [[DieSheep(), 1]]
 
 
 class Sheep(Agent, FMSPriority):
@@ -343,17 +353,11 @@ class Grass(Agent):
 
     def change_position(self):
         self.there_is_no_escape()
+        self.E -= self.config.grass_still_weight
         if self.E <= 0:
             self.E = 10.0
             self.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * self.disp
             self.pos += self.move
-            self.change_image(0)
-        elif self.E < 3.3:
-            self.change_image(2)
-        elif self.E < 6.6:
-            self.change_image(1)
-        else:
-            self.change_image(0)
 
 class FMSLive(Simulation):
     tmp: int
@@ -361,7 +365,7 @@ class FMSLive(Simulation):
 config = FMSConfig(
             image_rotation=True,
             movement_speed=1,
-            radius=300,
+            radius=350,
             seed=1,
         )
 (
@@ -370,8 +374,8 @@ config = FMSConfig(
     )
     # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
     # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
-    .batch_spawn_agents(1, Leopard, images=["images/leopard.png", "images/dead_leopard.png"])
-    .batch_spawn_agents(2, Grass, images=['images/grass3.png', 'images/grass2.png', 'images/grass1.png'])
+    .batch_spawn_agents(1, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
+    .batch_spawn_agents(2, Grass, images=['images/grass.png'])
     .batch_spawn_agents(2, Sheep, images=['images/sheep.png', 'images/dead_sheep.png'])
     .run()
 )
