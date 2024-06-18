@@ -21,6 +21,7 @@ class FMSConfig(Config):
     sheep_hunt_speed: float = 2.0
     sheep_run_speed: float = 5.0
     sheep_acceleration: float = 0.01
+    sheep_reproduce_chance: float = 0.3
 
     leo_nat_death: float = (10000) ** -1
     leo_rot_timer: int = 1000
@@ -71,6 +72,7 @@ class DieSheep():
     pass
 class Grass(Agent):
     pass
+
 
 class WanderLeo(LeoAction):
     def do(self, ag):
@@ -182,16 +184,19 @@ class WanderSheep(SheepAction):
     def prob(self, ag):
         hunter = ag.in_proximity_accuracy().without_distance().filter_kind(Leopard).first()
         grass = ag.in_proximity_accuracy().without_distance().filter_kind(Grass).first()
+        mate = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).first()
         ag.current_prey = grass
         ag.current_hunter = hunter
+        ag.current_mate = mate
         run_p = [RunSheep(), 0]
         if hunter is not None:
             run_p = [RunSheep(), hunter.config.leo_stealth]
         hunt_p = [HuntSheep(), int(grass is not None) * 0.99]
         nat_death_p = [DieSheep(), max(int(uniform(0, 1) < config.sheep_nat_death), int(ag.E == 0))]
         wander_p = [WanderSheep(), 1.0]
+        mate_p = [ReproduceSheep(), int((ag.pos - ag.current_mate.pos).length() <= 100)] if mate is not None else [ReproduceSheep(), 0]
 
-        return [nat_death_p, run_p, hunt_p, wander_p]
+        return [nat_death_p, run_p, hunt_p,mate_p, wander_p]
 
 class RunSheep(SheepAction):
     def do(self, ag):
@@ -261,6 +266,23 @@ class DieSheep(DieLeo):
     
     def prob(self, ag):
         return [[DieLeo(), 1]]
+    
+class ReproduceSheep(SheepAction):
+
+    def do(self, ag):
+        if ag.current_mate is not None:
+            ag.E = 0.5
+            ag.current_mate.E = 0.5
+            print("Reproducing...", ag.current_mate)
+            ag.reproduce()
+        
+    def switch(self, ag):
+        return
+    
+    def prob(self, ag):
+        if ag.current_mate is not None:
+            return [[ReproduceSheep(), 0.3]]
+        return [[ReproduceSheep(), 0]]
 
 
 class Sheep(Agent, FMSPriority):
@@ -272,6 +294,7 @@ class Sheep(Agent, FMSPriority):
     run_timer = config.sheep_run_timer
         
     current_prey = None
+    current_mate = None
 
     def change_position(self):
         self.there_is_no_escape()
@@ -302,6 +325,6 @@ config = FMSConfig(
     # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
     # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
     .batch_spawn_agents(1, Leopard, images=["images/red.png"])
-    .batch_spawn_agents(1, Sheep, images=['images/green.png'])
+    .batch_spawn_agents(5, Sheep, images=['images/green.png'])
     .run()
 )
