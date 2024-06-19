@@ -389,7 +389,7 @@ config = FMSConfig(
     )
     # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
     # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
-    .batch_spawn_agents(5, Grass, images=['images/grass.png'])
+    .batch_spawn_agents(5, Grass, images=['images/green_circle.png'])
     .batch_spawn_agents(20, Sheep, images=['images/sheep.png', 'images/dead_sheep.png'])
     .batch_spawn_agents(1, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
     .run()
