@@ -5,6 +5,7 @@ import pygame as pg
 from pygame.math import Vector2
 from vi import Agent, Simulation
 from vi.config import Config, dataclass, deserialize
+from simulation_vector import SimulationWithVectors
 from math import cos, radians
 
 LEO_COUNT = 10
@@ -23,13 +24,13 @@ class FMSConfig(Config):
     sheep_speed_wander: float = 1.0
     sheep_hunt_speed: float = 2.0
     sheep_run_speed: float = 6.0
-    sheep_acceleration: float = 0.5
+    sheep_acceleration: float = 0.1
 
     leo_vision_field: float = cos(radians(100))
     # sheep_vision_field: float = cos(radians(145))
     sheep_vision_field: float = -100
 
-    leo_nat_death: float = (10000) ** -1
+    leo_nat_death: float = (10000) ** -1 * 0
     leo_rot_timer: int = 1000
     leo_hunt_timer: int = 100
     leo_stealth: float = 0.01
@@ -49,7 +50,7 @@ class FMSConfig(Config):
     sheep_run_timer: int = 100
     sheep_eat_timer: int = 3
 
-    sheep_still_weight: float = 0.0001
+    sheep_still_weight: float = 0.001
     sheep_walk_weight: float = 0.001
     sheep_eat_weight: float = 0.04
 
@@ -246,7 +247,7 @@ class WanderSheep(SheepAction):
         run_p = [RunSheep(), 0]
         if hunter is not None:
             run_p = [RunSheep(), hunter.config.leo_stealth]
-        hunt_p = [JoinGrassSiteSheep(), int(ag.E < self.config.sheep_hungry) * int(grass is not None) * 0.99]
+        hunt_p = [HuntSheep(), int(ag.E < self.config.sheep_hungry) * int(grass is not None) * 0.99]
         nat_death_p = [DieSheep(), self.config.sheep_nat_death]
         wander_p = [WanderSheep(), 1.0]
 
@@ -279,26 +280,26 @@ class RunSheep(SheepAction):
 
         return [nat_death_p, run_p, wander_p]
 
-# class HuntSheep(SheepAction):
-#     def do(self, ag):
-#         prey_move = ag.current_prey.pos - ag.pos
-#         prey_move = prey_move.normalize() * config.sheep_hunt_speed
-#         ag.move = prey_move
+class HuntSheep(SheepAction):
+    def do(self, ag):
+        prey_move = ag.current_prey.pos - ag.pos
+        prey_move = prey_move.normalize() * config.sheep_hunt_speed
+        ag.move = prey_move
 
-#     def switch(self, ag):
-#         pass
+    def switch(self, ag):
+        pass
 
-#     def prob(self, ag):
-#         nat_death_p = [DieSheep(), self.config.sheep_nat_death]
-#         eat_p = [EatSheep(), int((ag.pos - ag.current_prey.pos).length() <= 5)]
-#         hunter = ag.in_proximity_accuracy().without_distance().filter_kind(Leopard).first()
-#         run_p = [RunSheep(), 0]
-#         if hunter is not None:
-#             run_p = [RunSheep(), hunter.config.leo_stealth]
-#         hunt_p = [HuntSheep(), 1.0]
-#         wander_p = [WanderSheep(), 1.0]
+    def prob(self, ag):
+        nat_death_p = [DieSheep(), self.config.sheep_nat_death]
+        eat_p = [EatSheep(), int((ag.pos - ag.current_prey.pos).length() <= 5)]
+        hunter = ag.in_proximity_accuracy().without_distance().filter_kind(Leopard).first()
+        run_p = [RunSheep(), 0]
+        if hunter is not None:
+            run_p = [RunSheep(), hunter.config.leo_stealth]
+        hunt_p = [HuntSheep(), 1.0]
+        wander_p = [WanderSheep(), 1.0]
 
-#         return [nat_death_p, run_p, eat_p, hunt_p, wander_p]
+        return [nat_death_p, run_p, eat_p, hunt_p, wander_p]
 
 class EatSheep(SheepAction):
     def do(self, ag):
@@ -374,7 +375,7 @@ class Grass(Agent):
             self.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * self.disp
             self.pos += self.move
 
-class FMSLive(Simulation):
+class FMSLive(SimulationWithVectors):
     tmp: int
 
 config = FMSConfig(
@@ -389,7 +390,7 @@ config = FMSConfig(
     )
     # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
     # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
-    .batch_spawn_agents(5, Grass, images=['images/green_circle.png'])
+    .batch_spawn_agents(5, Grass, images=['images/grass.png'])
     .batch_spawn_agents(20, Sheep, images=['images/sheep.png', 'images/dead_sheep.png'])
     .batch_spawn_agents(1, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
     .run()
