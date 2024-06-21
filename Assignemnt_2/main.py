@@ -26,8 +26,10 @@ class FMSConfig(Config):
 
     sheep_speed_wander: float = 1.0
     sheep_hunt_speed: float = 2.0
-    sheep_run_speed: float = 6.0
-    sheep_acceleration: float = 0.1
+    sheep_run_speed: float = 5.0
+    sheep_acceleration: float = 0.01
+    sheep_reproduce_chance: float = 0.1
+    sheep_mating_radius: float = 20.0
 
     leo_vision_field: float = cos(radians(100))
     # sheep_vision_field: float = cos(radians(145))
@@ -49,6 +51,7 @@ class FMSConfig(Config):
     sheep_full: float = 0.95
 
     sheep_nat_death: float = (10000) ** -1
+    sheep_reproduce_timer: int = 100
     sheep_rot_timer: int = 1000
     sheep_run_timer: int = 100
     sheep_eat_timer: int = 3
@@ -107,6 +110,7 @@ class DieSheep():
     pass
 class Grass(Agent):
     pass
+
 
 class WanderLeo(LeoAction):
     def do(self, ag):
@@ -249,16 +253,19 @@ class WanderSheep(SheepAction):
     def prob(self, ag):
         hunter = ag.in_proximity_accuracy().without_distance().filter_kind(Leopard).filter(lambda leo: sheep_see_leo(ag, leo)).first()
         grass = ag.in_proximity_accuracy().without_distance().filter_kind(Grass).first()
+        mate = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).first()
         ag.current_prey = grass
         ag.current_hunter = hunter
+        ag.current_mate = mate
         run_p = [RunSheep(), 0]
         if hunter is not None:
             run_p = [RunSheep(), hunter.config.leo_stealth]
         hunt_p = [JoinGrassSiteSheep(), int(ag.E < self.config.sheep_hungry) * int(grass is not None) * 0.99]
         nat_death_p = [DieSheep(), self.config.sheep_nat_death]
         wander_p = [WanderSheep(), 1.0]
+        mate_p = [ReproduceSheep(), int((ag.pos - ag.current_mate.pos).length() <= config.sheep_mating_radius)] if mate is not None else [ReproduceSheep(), 0]
 
-        return [nat_death_p, run_p, hunt_p, wander_p]
+        return [nat_death_p, run_p, hunt_p,mate_p, wander_p]
 
 class RunSheep(SheepAction):
     def do(self, ag):
@@ -346,6 +353,33 @@ class DieSheep(DieLeo):
         return [[DieSheep(), 1]]
 
 
+class ReproduceSheep(SheepAction):
+    
+    def do(self, ag):
+        if ag.current_mate is not None and ag.can_reproduce:
+            ag.move = Vector2(0, 0) 
+            ag.E = 0.5
+            ag.current_mate.E = 0.5
+            ag.reproduce()
+            ag.can_reproduce = False
+            ag.current_mate.can_reproduce = False
+        else:
+            ag.reproduce_timer -= 1
+
+        if ag.reproduce_timer == 0:
+            ag.can_reproduce = True
+            ag.current_mate.can_reproduce = True
+        
+    def switch(self, ag):
+        if ag.reproduce_timer == 0:
+            ag.reproduce_timer = self.config.sheep_reproduce_timer
+    
+    def prob(self, ag):
+        if ag.current_mate is not None:
+            mate_p = [ReproduceSheep(), config.sheep_reproduce_chance]
+            wander_p = [WanderSheep(), 1 - config.sheep_reproduce_chance]
+            return [mate_p, wander_p]
+
 class Sheep(Agent, FMSPriority):
     config = FMSConfig()
     current_action = WanderSheep()
@@ -355,10 +389,23 @@ class Sheep(Agent, FMSPriority):
 
     death_timer = config.sheep_rot_timer
     run_timer = config.sheep_run_timer
+    reproduce_timer = config.sheep_reproduce_timer
         
     current_prey = None
+    current_mate = None
+    can_reproduce = False
 
-    def change_position(self):
+    def __init__(self, *args, **kwargs):
+        global SHEEP_COUNT
+        SHEEP_COUNT += 1
+        super().__init__(*args, **kwargs)
+    
+    def __del__(self):
+        global SHEEP_COUNT
+        SHEEP_COUNT -= 1
+        super().__del__()
+
+    def change_position(self):        
         self.there_is_no_escape()
         self.do()
         self.pos += self.move
@@ -379,6 +426,10 @@ class Grass(Agent):
     disp: float = 50.0
 
     def change_position(self):
+        global SHEEP_COUNT
+        # print(self.id)
+        if self.id == 1:
+            print(SHEEP_COUNT)
         self.there_is_no_escape()
         #self.E -= self.config.grass_still_weight
         if self.E <= 0:
