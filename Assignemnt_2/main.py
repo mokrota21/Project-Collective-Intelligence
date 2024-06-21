@@ -7,6 +7,8 @@ from vi import Agent, Simulation
 from vi.config import Config, dataclass, deserialize
 from simulation_vector import SimulationWithVectors
 from math import cos, radians
+import polars as pl
+import matplotlib.pyplot as plt
 
 LEO_COUNT = 10
 MAX_NUM = 10 ** 9
@@ -204,6 +206,10 @@ class Leopard(Agent, FMSPriority):
         if self.E < 0:
             self.kill()
 
+    def update(self):
+        self.save_data("E", self.E)
+        self.save_data("Type", "Leopard")
+
 # Sheep
 
 class SheepAction():
@@ -247,7 +253,7 @@ class WanderSheep(SheepAction):
         run_p = [RunSheep(), 0]
         if hunter is not None:
             run_p = [RunSheep(), hunter.config.leo_stealth]
-        hunt_p = [HuntSheep(), int(ag.E < self.config.sheep_hungry) * int(grass is not None) * 0.99]
+        hunt_p = [JoinGrassSiteSheep(), int(ag.E < self.config.sheep_hungry) * int(grass is not None) * 0.99]
         nat_death_p = [DieSheep(), self.config.sheep_nat_death]
         wander_p = [WanderSheep(), 1.0]
 
@@ -360,6 +366,10 @@ class Sheep(Agent, FMSPriority):
         if self.E < 0:
             self.kill()
 
+    def update(self):
+        self.save_data("E", self.E)
+        self.save_data("Type", "Sheep")
+
 #Grass
 
 class Grass(Agent):
@@ -369,29 +379,100 @@ class Grass(Agent):
 
     def change_position(self):
         self.there_is_no_escape()
-        self.E -= self.config.grass_still_weight
+        #self.E -= self.config.grass_still_weight
         if self.E <= 0:
             self.E = 10.0
             self.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * self.disp
             self.pos += self.move
 
-class FMSLive(SimulationWithVectors):
+    def update(self):
+        self.save_data("E", self.E)
+        self.save_data("Type", "Grass")
+
+class FMSLive(Simulation):
     tmp: int
 
 config = FMSConfig(
-            image_rotation=True,
+            image_rotation=False,
             movement_speed=1,
             radius=100,
             seed=1,
         )
-(
-    FMSLive(
-        config
+
+def run_simulation(config: FMSConfig) -> pl.DataFrame:
+    return (
+        FMSLive(
+            config
+        )
+        # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
+        # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
+        .batch_spawn_agents(5, Grass, images=['images/green_circle.png'])
+        .batch_spawn_agents(20, Sheep, images=['images/sheep.png', 'images/dead_sheep.png'])
+        .batch_spawn_agents(1, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
+        .run()
+        .snapshots
     )
-    # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
-    # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
-    .batch_spawn_agents(5, Grass, images=['images/grass.png'])
-    .batch_spawn_agents(20, Sheep, images=['images/sheep.png', 'images/dead_sheep.png'])
-    .batch_spawn_agents(1, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
-    .run()
-)
+
+
+if __name__ == "__main__":
+
+    df = run_simulation(config)
+
+    # Filter the dataframe for 'Leopard' and 'Sheep'
+    df_leopard = df.filter(pl.col("Type") == "Leopard")
+    df_sheep = df.filter(pl.col("Type") == "Sheep")
+
+    # Calculate the average energy for each frame
+    df_leopard_e = df_leopard.group_by("frame").agg(avg_E=pl.col("E").mean()).sort("frame")
+    df_sheep_e = df_sheep.group_by("frame").agg(avg_E=pl.col("E").mean()).sort("frame")
+
+    # Plot using 
+    plt.plot(df_leopard_e['frame'], df_leopard_e['avg_E'], label='Leopard')
+    plt.plot(df_sheep_e['frame'], df_sheep_e['avg_E'], label='Sheep')
+
+    plt.xlabel('Frame')
+    plt.ylabel('Average Energy')
+    plt.title('Average Energy of Sheep and Leopards over Frames')
+    plt.legend()
+
+    plt.show()
+
+    # Create an array for the frames
+    frames = np.arange(len(df_leopard_e['frame']))
+
+    # Create a bar plot
+    plt.bar(frames - 0.2, df_leopard_e['avg_E'], 0.4, label='Leopard')
+    plt.bar(frames + 0.2, df_sheep_e['avg_E'], 0.4, label='Sheep')
+
+    plt.xlabel('Frame')
+    plt.ylabel('Average Energy')
+    plt.title('Average Energy of Sheep and Leopards over Frames')
+    plt.legend()
+
+    plt.show()
+
+    # Create a plot for the energy of the grass
+    df_grass = df.filter(pl.col("Type") == "Grass")
+    df_grass = df_grass.group_by("frame").agg(avg_E=pl.col("E").mean()).sort("frame")
+
+    plt.plot(df_grass['frame'], df_grass['avg_E'], label='Grass')
+    plt.xlabel('Frame')
+    plt.ylabel('Average Energy')
+    plt.title('Average Energy of Grass over Frames')
+
+    plt.show()
+
+    # Calculate the count of each type for each frame
+    df_leopard_count = df.filter(pl.col("Type") == "Leopard").group_by("frame").agg(count=pl.col("Type").count()).sort("frame")
+    df_sheep_count = df.filter(pl.col("Type") == "Sheep").group_by("frame").agg(count=pl.col("Type").count()).sort("frame")
+
+    # Plot using matplotlib
+    plt.plot(df_leopard_count['frame'], df_leopard_count['count'], label='Leopard')
+    plt.plot(df_sheep_count['frame'], df_sheep_count['count'], label='Sheep')
+
+    plt.xlabel('Frame')
+    plt.ylabel('Population')
+    plt.title('Population of Sheep and Leopards over Frames')
+    plt.legend()
+
+    plt.show()
