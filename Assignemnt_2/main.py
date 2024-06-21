@@ -9,6 +9,7 @@ from simulation_vector import SimulationWithVectors
 from math import cos, radians
 import polars as pl
 import matplotlib.pyplot as plt
+import numpy as np
 
 LEO_COUNT = 10
 MAX_NUM = 10 ** 9
@@ -389,11 +390,11 @@ class Grass(Agent):
         self.save_data("E", self.E)
         self.save_data("Type", "Grass")
 
-class FMSLive(Simulation):
+class FMSLive(SimulationWithVectors):
     tmp: int
 
 config = FMSConfig(
-            image_rotation=False,
+            image_rotation=True,
             movement_speed=1,
             radius=100,
             seed=1,
