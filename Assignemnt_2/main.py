@@ -11,7 +11,8 @@ import polars as pl
 import matplotlib.pyplot as plt
 import numpy as np
 
-LEO_COUNT = 10
+TOTAL_CAP = 200
+LEO_COUNT = 0
 MAX_NUM = 10 ** 9
 SHEEP_COUNT = 0
 
@@ -21,7 +22,7 @@ SHEEP_COUNT = 0
 class FMSConfig(Config):
     direction_change: int = 100
 
-    leo_speed_wander: float = 2.0
+    leo_speed_wander: float = 3.0
     leo_hunt_speed: float = 4.0
 
     sheep_speed_wander: float = 1.0
@@ -32,7 +33,7 @@ class FMSConfig(Config):
     sheep_mating_radius: float = 20.0
 
     leo_vision_field: float = cos(radians(100))
-    sheep_vision_field: float = cos(radians(145))
+    sheep_vision_field: float = cos(radians(180))
 
     sheep_action_weight: float = 0.5
     leopard_action_weight: float = 0.5
@@ -43,16 +44,16 @@ class FMSConfig(Config):
 
     leo_nat_death: float = (10000) ** -1 * 0
     leo_rot_timer: int = 1000
-    leo_hunt_timer: int = 100
+    leo_hunt_timer: int = 30
     leo_stealth: float = 0.01
-    leo_eat_speed: float = 0.4
-    leo_reproduce_timer: int = 1000
+    leo_eat_speed: float = 0.4  
+    leo_reproduce_timer: int = 5000
     leo_reproduce_chance: float = 1.0
-    leo_hunt_chance: float = 0.5
+    leo_hunt_chance: float = 0.1
     leo_energy_gain: float = 1.5
 
-    leo_still_weight: float = 0.0001
-    leo_walk_weight: float = 0.001
+    leo_still_weight: float = 0.001
+    leo_walk_weight: float = 0.0001
 
     leo_hungry: float = 0.60
     sheep_hungry: float = 0.70
@@ -61,19 +62,19 @@ class FMSConfig(Config):
     sheep_full: float = 0.95
 
     sheep_nat_death: float = (10000) ** -1
-    sheep_reproduce_timer: int = 0
+    sheep_reproduce_timer: int = 10
     sheep_rot_timer: int = 1000
     sheep_run_timer: int = 100
     sheep_eat_timer: int = 3
 
-    sheep_still_weight: float = 0.001
-    sheep_walk_weight: float = 0.001
+    sheep_still_weight: float = 0.0005
+    sheep_walk_weight: float = 0.0
     sheep_eat_weight: float = 0.04
 
-    sheep_reproduce_thresh: float = 0.8
-    leopard_reproduce_thresh: float = 0.9
+    sheep_reproduce_thresh: float = 0.3
+    leopard_reproduce_thresh: float = 0.8
 
-    grass_still_weight: float = 0.00001
+    grass_still_weight: float = 0.0
 
     join_t_max: int = 10
 
@@ -213,13 +214,14 @@ class EatLeo(LeoAction):
         pass
 
     def prob(self, ag):
+        global LEO_COUNT, SHEEP_COUNT, TOTAL_CAP
         full = ag.E > self.config.leo_full
         prey_nutritional = ag.current_prey is not None and ag.current_prey.E > 0
         nat_death_p = [DieLeo(), self.config.leo_nat_death]
         eat_p = [EatLeo(), int(prey_nutritional and not full)]
         wander_p = [WanderLeo(), 1]
         mate_p = [ReproduceLeo(), int(self.config.leo_reproduce_chance)] \
-            if ag.E >= self.config.leopard_reproduce_thresh and ag.can_reproduce else [ReproduceLeo(), 0]
+            if LEO_COUNT * 10 + SHEEP_COUNT < TOTAL_CAP and ag.E >= self.config.leopard_reproduce_thresh and ag.can_reproduce else [ReproduceLeo(), 0]
         return [nat_death_p, eat_p, mate_p, wander_p]
 
 class DieLeo(LeoAction):
@@ -240,7 +242,7 @@ class DieLeo(LeoAction):
 class Leopard(Agent, FMSPriority):
     config = FMSConfig()
     current_action = WanderLeo()
-    E: float = 1.0
+    E: float = uniform(0.8, 1.0)
     timer: int = 0
 
     death_timer = config.leo_rot_timer
@@ -275,13 +277,16 @@ class SheepAction():
 class JoinGrassSiteSheep(SheepAction):
     def do(self, ag):
         # l = ag.move.length()
-        ag.move = (ag.current_prey.pos - ag.pos).normalize() * self.config.sheep_run_speed
         ag.join_timer -= 1
+        move = ag.current_prey.pos - ag.pos
+        if move.length() == 0:
+            return
+        ag.move = move.normalize() * self.config.sheep_run_speed
 
     def switch(self, ag):
-        print(ag.join_timer)
+        #print(ag.join_timer)
         ag.join_timer = randrange(self.config.join_t_max // 2, self.config.join_t_max)
-        print(ag.join_timer)
+        #print(ag.join_timer)
     
     def prob(self, ag):
         nat_death_p = [DieSheep(), self.config.sheep_nat_death]
@@ -406,6 +411,7 @@ class EatSheep(SheepAction):
         pass
 
     def prob(self, ag):
+        global SHEEP_COUNT, LEO_COUNT, TOTAL_CAP
         full = ag.E > self.config.sheep_full
         prey_nutritional = ag.current_prey is not None and ag.current_prey.E > 0
         nat_death_p = [DieSheep(), self.config.sheep_nat_death]
@@ -418,8 +424,8 @@ class EatSheep(SheepAction):
         mate = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).first()
         ag.current_mate = mate
         mate_p = [ReproduceSheep(), int(self.config.sheep_reproduce_chance)] \
-            if mate is not None and ag.E >= self.config.sheep_reproduce_thresh and ag.can_reproduce else [ReproduceSheep(), 0]
-        print(ag.can_reproduce, ag.E >= self.config.sheep_reproduce_thresh, mate is not None)
+            if SHEEP_COUNT + 10 * LEO_COUNT < TOTAL_CAP and mate is not None and ag.E >= self.config.sheep_reproduce_thresh and ag.can_reproduce else [ReproduceSheep(), 0]
+        #print(ag.can_reproduce, ag.E >= self.config.sheep_reproduce_thresh, mate is not None)
 
         return [nat_death_p, run_p, mate_p, eat_p, wander_p]
 
@@ -442,9 +448,9 @@ class ReproduceSheep(SheepAction):
     def do(self, ag):
         # if ag.current_mate is not None and ag.can_reproduce:
             ag.move = Vector2(0, 0) 
-            ag.E -= 0.5
+            #ag.E -= 0.1
             # ag.current_mate.E = 0.5
-            print(ag.reproduce().E, ag.E)
+            #print(ag.reproduce().E, ag.E)
             ag.can_reproduce = False
             # ag.current_mate.can_reproduce = False
 
@@ -468,7 +474,7 @@ class ReproduceSheep(SheepAction):
 class Sheep(Agent, FMSPriority):
     config = FMSConfig()
     current_action = WanderSheep()
-    E: float = 1.0
+    E: float = uniform(0.8, 1.0)
     timer: int = 0
     join_timer: int = randrange(config.join_t_max // 2, config.join_t_max)
 
@@ -509,12 +515,12 @@ class Sheep(Agent, FMSPriority):
 
 class Grass(Agent):
     config: FMSConfig
-    E: float = 10.0
-    disp: float = 50.0
+    E: float = 40.0
+    disp: float = 500.0
 
     def change_position(self):
         global SHEEP_COUNT
-        self.E = 100.0
+        #self.E = 100.0
         # print(self.id)
         # if self.id == 1:
             # print(SHEEP_COUNT)
@@ -522,8 +528,9 @@ class Grass(Agent):
         #self.E -= self.config.grass_still_weight
         if self.E <= 0:
             self.E = 10.0
-            self.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * self.disp
-            self.pos += self.move
+            #self.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * self.disp
+            self.move = Vector2(0, 0)
+            self.pos += Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * self.disp
 
     def update(self):
         self.save_data("E", self.E)
@@ -535,7 +542,7 @@ class FMSLive(SimulationWithVectors):
 config = FMSConfig(
             image_rotation=True,
             movement_speed=1,
-            radius=200,
+            radius=150,
             seed=1,
         )
 
@@ -546,9 +553,9 @@ def run_simulation(config: FMSConfig) -> pl.DataFrame:
         )
         # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
         # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
-        .batch_spawn_agents(5, Grass, images=['images/green_circle.png'])
-        .batch_spawn_agents(20, Sheep, images=['images/sheep.png', 'images/dead_sheep.png'])
-        .batch_spawn_agents(3, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
+        .batch_spawn_agents(20, Grass, images=['images/green_circle.png'])
+        .batch_spawn_agents(100, Sheep, images=['images/sheep.png', 'images/dead_sheep.png'])
+        .batch_spawn_agents(10, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
         .run()
         .snapshots
     )
@@ -557,7 +564,7 @@ def run_simulation(config: FMSConfig) -> pl.DataFrame:
 if __name__ == "__main__":
 
     df = run_simulation(config)
-
+'''
     # Filter the dataframe for 'Leopard' and 'Sheep'
     df_leopard = df.filter(pl.col("Type") == "Leopard")
     df_sheep = df.filter(pl.col("Type") == "Sheep")
@@ -602,3 +609,4 @@ if __name__ == "__main__":
     plt.legend()
 
     plt.show()
+    '''
