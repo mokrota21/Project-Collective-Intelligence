@@ -13,7 +13,7 @@ import numpy as np
 
 LEO_COUNT = 10
 MAX_NUM = 10 ** 9
-SHEEP_COUNT = 100
+SHEEP_COUNT = 0
 
 # Leopard
 @deserialize
@@ -28,7 +28,7 @@ class FMSConfig(Config):
     sheep_hunt_speed: float = 2.0
     sheep_run_speed: float = 5.0
     sheep_acceleration: float = 0.01
-    sheep_reproduce_chance: float = 0.1
+    sheep_reproduce_chance: float = 1.0
     sheep_mating_radius: float = 20.0
 
     leo_vision_field: float = cos(radians(100))
@@ -59,6 +59,9 @@ class FMSConfig(Config):
     sheep_still_weight: float = 0.001
     sheep_walk_weight: float = 0.001
     sheep_eat_weight: float = 0.04
+
+    sheep_reproduce_thresh: float = 0.8
+    leopard_reproduce_thresh: float = 0.8
 
     grass_still_weight: float = 0.00001
 
@@ -114,9 +117,7 @@ class Grass(Agent):
 
 class WanderLeo(LeoAction):
     def do(self, ag):
-        global MAX_NUM
         if ag.timer % self.config.direction_change == 0:
-            ag.timer = ag.timer % MAX_NUM
             ag.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * config.leo_speed_wander * uniform(0, (1 - ag.E))
         return
 
@@ -203,11 +204,12 @@ class Leopard(Agent, FMSPriority):
     current_prey = None
 
     def change_position(self):
+        global MAX_NUM
         self.there_is_no_escape()
         self.do()
         self.pos += self.move
         self.E = self.E - self.config.leo_still_weight - self.config.leo_walk_weight * self.move.length()
-        self.timer += 1
+        self.timer = (self.timer + 1) % MAX_NUM
         if self.E < 0:
             self.kill()
 
@@ -223,8 +225,12 @@ class SheepAction():
 
 class JoinGrassSiteSheep(SheepAction):
     def do(self, ag):
-        ag.move = ag.move.normalize() * self.config.sheep_hunt_speed
-        ag.join_timer -= 1
+        l = ag.move.length()
+        if l != 0:
+            ag.move = ag.move.normalize() * min(l + self.config.sheep_acceleration, self.config.sheep_run_speed)
+            ag.join_timer -= 1
+        else:
+            ag.join_timer = 0
     
     def switch(self, ag):
         ag.join_timer = randrange(self.config.join_t_max)
@@ -253,19 +259,16 @@ class WanderSheep(SheepAction):
     def prob(self, ag):
         hunter = ag.in_proximity_accuracy().without_distance().filter_kind(Leopard).filter(lambda leo: sheep_see_leo(ag, leo)).first()
         grass = ag.in_proximity_accuracy().without_distance().filter_kind(Grass).first()
-        mate = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).first()
         ag.current_prey = grass
         ag.current_hunter = hunter
-        ag.current_mate = mate
         run_p = [RunSheep(), 0]
         if hunter is not None:
             run_p = [RunSheep(), hunter.config.leo_stealth]
         hunt_p = [JoinGrassSiteSheep(), int(ag.E < self.config.sheep_hungry) * int(grass is not None) * 0.99]
         nat_death_p = [DieSheep(), self.config.sheep_nat_death]
         wander_p = [WanderSheep(), 1.0]
-        mate_p = [ReproduceSheep(), int((ag.pos - ag.current_mate.pos).length() <= config.sheep_mating_radius)] if mate is not None else [ReproduceSheep(), 0]
 
-        return [nat_death_p, run_p, hunt_p,mate_p, wander_p]
+        return [nat_death_p, run_p, hunt_p, wander_p]
 
 class RunSheep(SheepAction):
     def do(self, ag):
@@ -335,8 +338,13 @@ class EatSheep(SheepAction):
             run_p = [RunSheep(), hunter.config.leo_stealth]
         eat_p = [EatSheep(), int(not full and prey_nutritional)]
         wander_p = [WanderSheep(), 1]
+        mate = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).first()
+        ag.current_mate = mate
+        mate_p = [ReproduceSheep(), int(self.config.sheep_reproduce_chance)] \
+            if mate is not None and ag.E >= self.config.sheep_reproduce_thresh and ag.can_reproduce else [ReproduceSheep(), 0]
+        print(ag.can_reproduce, ag.E >= self.config.sheep_reproduce_thresh, mate is not None)
 
-        return [nat_death_p, run_p, eat_p, wander_p]
+        return [nat_death_p, run_p, mate_p, eat_p, wander_p]
 
 class DieSheep(DieLeo):
     def do(self, ag):
@@ -354,21 +362,19 @@ class DieSheep(DieLeo):
 
 
 class ReproduceSheep(SheepAction):
-    
     def do(self, ag):
-        if ag.current_mate is not None and ag.can_reproduce:
+            print('fuck alert')
+        # if ag.current_mate is not None and ag.can_reproduce:
             ag.move = Vector2(0, 0) 
-            ag.E = 0.5
-            ag.current_mate.E = 0.5
+            ag.E -= 0.5
+            # ag.current_mate.E = 0.5
             ag.reproduce()
             ag.can_reproduce = False
-            ag.current_mate.can_reproduce = False
-        else:
-            ag.reproduce_timer -= 1
+            # ag.current_mate.can_reproduce = False
 
-        if ag.reproduce_timer == 0:
-            ag.can_reproduce = True
-            ag.current_mate.can_reproduce = True
+        # if ag.reproduce_timer == 0:
+            # ag.can_reproduce = True
+            # ag.current_mate.can_reproduce = True
         
     def switch(self, ag):
         if ag.reproduce_timer == 0:
@@ -376,9 +382,11 @@ class ReproduceSheep(SheepAction):
     
     def prob(self, ag):
         if ag.current_mate is not None:
-            mate_p = [ReproduceSheep(), config.sheep_reproduce_chance]
+            nat_death_p = [DieSheep(), self.config.sheep_nat_death]
+            run_p = [RunSheep(), 0]
+            # mate_p = [ReproduceSheep(), config.sheep_reproduce_chance]
             wander_p = [WanderSheep(), 1 - config.sheep_reproduce_chance]
-            return [mate_p, wander_p]
+            return [nat_death_p, run_p, wander_p]
 
 class Sheep(Agent, FMSPriority):
     config = FMSConfig()
@@ -403,14 +411,16 @@ class Sheep(Agent, FMSPriority):
     def __del__(self):
         global SHEEP_COUNT
         SHEEP_COUNT -= 1
-        super().__del__()
 
-    def change_position(self):        
+    def change_position(self): 
+        global MAX_NUM       
         self.there_is_no_escape()
         self.do()
         self.pos += self.move
         self.E = self.E - self.config.sheep_still_weight - self.config.sheep_walk_weight * self.move.length()
-        self.timer += 1
+        self.timer = (self.timer + 1) % MAX_NUM
+        self.reproduce_timer = max(0, self.reproduce_timer - 1)
+        self.can_reproduce = self.reproduce_timer == 0
         if self.E < 0:
             self.kill()
 
@@ -460,7 +470,7 @@ def run_simulation(config: FMSConfig) -> pl.DataFrame:
         # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
         .batch_spawn_agents(5, Grass, images=['images/green_circle.png'])
         .batch_spawn_agents(20, Sheep, images=['images/sheep.png', 'images/dead_sheep.png'])
-        .batch_spawn_agents(1, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
+        # .batch_spawn_agents(3, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
         .run()
         .snapshots
     )
