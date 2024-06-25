@@ -124,11 +124,22 @@ class DieSheep():
 class Grass(Agent):
     pass
 
+def Cohesion(agent, neighbours):
+    count = len(neighbours)
+    if count == 0:
+        return Vector2(0, 0)
+    total_p = Vector2(0, 0)
+    for boid in neighbours:
+        total_p += boid.pos
+    avg_p = total_p / count    
+    res = avg_p - agent.pos
+    return res
 
 class WanderLeo(LeoAction):
     def do(self, ag):
         if ag.timer % self.config.direction_change == 0:
-            ag.move = Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() * config.leo_speed_wander * uniform(0, (1 - ag.E))
+            neighbours = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).collect_set()
+            ag.move = ((Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() + Cohesion(ag, neighbours))).normalize() * self.config.sheep_speed_wander * uniform(0, (1 - ag.E) ** 2)
         return
 
     def switch(self, ag):
@@ -293,21 +304,6 @@ def Alignment(agent, neighbours):
         total_v += boid.move
     avg_v = total_v / count
     res = avg_v  - agent.move
-    if res.length() != 0:
-        res = res.normalize()
-    return res
-
-def Cohesion(agent, neighbours):
-    count = len(neighbours)
-    if count == 0:
-        return Vector2(0, 0)
-    total_p = Vector2(0, 0)
-    for boid in neighbours:
-        total_p += boid.pos
-    avg_p = total_p / count    
-    res = avg_p - agent.pos
-    if res.length() != 0:
-        res = res.normalize()
     return res
 
 def Separation(agent, neighbours):
@@ -319,8 +315,6 @@ def Separation(agent, neighbours):
         total_p += agent.pos - boid.pos
     avg_p = total_p / count
     res = avg_p
-    if res.length() != 0:
-        res = res.normalize()
     return res
 
 def CalculateMove(agent, neighbours, a, c, s):
@@ -333,7 +327,7 @@ class WanderSheep(SheepAction):
         global MAX_NUM
         if ag.timer % self.config.direction_change == 0:
             neighbours = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).collect_set()
-            ag.move = (Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() + CalculateMove(ag, neighbours, 0.3, 0.3, 0.4)) * self.config.sheep_speed_wander * uniform(0, (1 - ag.E) ** 2)
+            ag.move = ((Vector2(uniform(-1, 1), uniform(-1, 1)).normalize() + CalculateMove(ag, neighbours, 0.3, 0.3, 0.4))).normalize() * self.config.sheep_speed_wander * uniform(0, (1 - ag.E) ** 2)
         return
 
     def switch(self, ag):
