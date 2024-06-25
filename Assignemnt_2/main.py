@@ -40,11 +40,15 @@ class FMSConfig(Config):
     leo_hunt_timer: int = 100
     leo_stealth: float = 0.01
     leo_eat_speed: float = 0.4
+    leo_reproduce_timer: int = 1000
+    leo_reproduce_chance: float = 1.0
+    leo_hunt_chance: float = 0.5
+    leo_energy_gain: float = 1.5
 
     leo_still_weight: float = 0.0001
     leo_walk_weight: float = 0.001
 
-    leo_hungry: float = 0.70
+    leo_hungry: float = 0.60
     sheep_hungry: float = 0.70
 
     leo_full: float = 0.95
@@ -61,7 +65,7 @@ class FMSConfig(Config):
     sheep_eat_weight: float = 0.04
 
     sheep_reproduce_thresh: float = 0.8
-    leopard_reproduce_thresh: float = 0.8
+    leopard_reproduce_thresh: float = 0.9
 
     grass_still_weight: float = 0.00001
 
@@ -132,11 +136,35 @@ class WanderLeo(LeoAction):
         hunt_p = [HuntLeo(), 0]
         if prey is not None:
             hungry = ag.E < self.config.leo_hungry
-            hunt_p = [HuntLeo(), int(hungry) * 0.99]
+            hunt_p = [HuntLeo(), int(hungry) * self.config.leo_hunt_chance]
         nat_death_p = [DieLeo(), self.config.leo_nat_death]
         wander_p = [WanderLeo(), 1.0]
 
         return [nat_death_p, hunt_p, wander_p]
+
+class ReproduceLeo(LeoAction):
+    def do(self, ag):
+            #print('fuck alert')
+        # if ag.current_mate is not None and ag.can_reproduce:
+            ag.move = Vector2(0, 0) 
+            #ag.E -= 0.2
+            # ag.current_mate.E = 0.5
+            ag.reproduce()
+            ag.can_reproduce = False
+            # ag.current_mate.can_reproduce = False
+
+        # if ag.reproduce_timer == 0:
+            # ag.can_reproduce = True
+            # ag.current_mate.can_reproduce = True
+        
+    def switch(self, ag):
+        if ag.reproduce_timer == 0:
+            ag.reproduce_timer = self.config.leo_reproduce_timer
+    
+    def prob(self, ag):
+        nat_death_p = [DieLeo(), self.config.leo_nat_death]
+        wander_p = [WanderLeo(), 1 - config.sheep_reproduce_chance]
+        return [nat_death_p, wander_p]
 
 class HuntLeo(LeoAction):
     def do(self, ag):
@@ -155,14 +183,12 @@ class HuntLeo(LeoAction):
 
         return [nat_death_p, eat_p, hunt_p, wander_p]
 
-
-
 class EatLeo(LeoAction):
     def do(self, ag: Leopard):
         ag.current_prey.current_action = DieSheep()
         ag.move = Vector2(0, 0)
         change_E = min(config.leo_eat_speed, ag.current_prey.E)
-        ag.E = min(ag.E + change_E, 1.0)
+        ag.E = min(ag.E * config.leo_energy_gain + change_E, 1.0)
         ag.current_prey.E -= change_E
 
     def switch(self, ag):
@@ -174,8 +200,9 @@ class EatLeo(LeoAction):
         nat_death_p = [DieLeo(), self.config.leo_nat_death]
         eat_p = [EatLeo(), int(prey_nutritional and not full)]
         wander_p = [WanderLeo(), 1]
-
-        return [nat_death_p, eat_p, wander_p]
+        mate_p = [ReproduceLeo(), int(self.config.leo_reproduce_chance)] \
+            if ag.E >= self.config.leopard_reproduce_thresh and ag.can_reproduce else [ReproduceLeo(), 0]
+        return [nat_death_p, eat_p, mate_p, wander_p]
 
 class DieLeo(LeoAction):
     def do(self, ag):
@@ -200,8 +227,10 @@ class Leopard(Agent, FMSPriority):
 
     death_timer = config.leo_rot_timer
     leo_hunt_timer = config.leo_hunt_timer
+    reproduce_timer = config.leo_reproduce_timer
         
     current_prey = None
+    can_reproduce = False
 
     def change_position(self):
         global MAX_NUM
@@ -210,6 +239,8 @@ class Leopard(Agent, FMSPriority):
         self.pos += self.move
         self.E = self.E - self.config.leo_still_weight - self.config.leo_walk_weight * self.move.length()
         self.timer = (self.timer + 1) % MAX_NUM
+        self.reproduce_timer = max(0, self.reproduce_timer - 1)
+        self.can_reproduce = self.reproduce_timer == 0
         if self.E < 0:
             self.kill()
 
@@ -241,7 +272,7 @@ class JoinGrassSiteSheep(SheepAction):
         run_p = [RunSheep(), 0]
         if hunter is not None:
             run_p = [RunSheep(), hunter.config.leo_stealth]
-        join_p = [JoinGrassSiteSheep(), int(ag.join_timer == 0)]
+        join_p = [JoinGrassSiteSheep(), int(ag.join_timer != 0)]
         eat_p = [EatSheep(), 1]
         return [nat_death_p, run_p, join_p, eat_p]
 
@@ -342,7 +373,7 @@ class EatSheep(SheepAction):
         ag.current_mate = mate
         mate_p = [ReproduceSheep(), int(self.config.sheep_reproduce_chance)] \
             if mate is not None and ag.E >= self.config.sheep_reproduce_thresh and ag.can_reproduce else [ReproduceSheep(), 0]
-        print(ag.can_reproduce, ag.E >= self.config.sheep_reproduce_thresh, mate is not None)
+        #print(ag.can_reproduce, ag.E >= self.config.sheep_reproduce_thresh, mate is not None)
 
         return [nat_death_p, run_p, mate_p, eat_p, wander_p]
 
@@ -363,7 +394,7 @@ class DieSheep(DieLeo):
 
 class ReproduceSheep(SheepAction):
     def do(self, ag):
-            print('fuck alert')
+            #print('fuck alert')
         # if ag.current_mate is not None and ag.can_reproduce:
             ag.move = Vector2(0, 0) 
             ag.E -= 0.5
@@ -438,8 +469,8 @@ class Grass(Agent):
     def change_position(self):
         global SHEEP_COUNT
         # print(self.id)
-        if self.id == 1:
-            print(SHEEP_COUNT)
+        #if self.id == 1:
+        #    print(SHEEP_COUNT)
         self.there_is_no_escape()
         #self.E -= self.config.grass_still_weight
         if self.E <= 0:
@@ -457,7 +488,7 @@ class FMSLive(SimulationWithVectors):
 config = FMSConfig(
             image_rotation=True,
             movement_speed=1,
-            radius=100,
+            radius=200,
             seed=1,
         )
 
@@ -470,7 +501,7 @@ def run_simulation(config: FMSConfig) -> pl.DataFrame:
         # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
         .batch_spawn_agents(5, Grass, images=['images/green_circle.png'])
         .batch_spawn_agents(20, Sheep, images=['images/sheep.png', 'images/dead_sheep.png'])
-        # .batch_spawn_agents(3, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
+        .batch_spawn_agents(3, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
         .run()
         .snapshots
     )
@@ -491,20 +522,6 @@ if __name__ == "__main__":
     # Plot using 
     plt.plot(df_leopard_e['frame'], df_leopard_e['avg_E'], label='Leopard')
     plt.plot(df_sheep_e['frame'], df_sheep_e['avg_E'], label='Sheep')
-
-    plt.xlabel('Frame')
-    plt.ylabel('Average Energy')
-    plt.title('Average Energy of Sheep and Leopards over Frames')
-    plt.legend()
-
-    plt.show()
-
-    # Create an array for the frames
-    frames = np.arange(len(df_leopard_e['frame']))
-
-    # Create a bar plot
-    plt.bar(frames - 0.2, df_leopard_e['avg_E'], 0.4, label='Leopard')
-    plt.bar(frames + 0.2, df_sheep_e['avg_E'], 0.4, label='Sheep')
 
     plt.xlabel('Frame')
     plt.ylabel('Average Energy')
