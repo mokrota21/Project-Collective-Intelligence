@@ -3,7 +3,7 @@ from random import uniform, randrange
 from enum import Enum, auto
 import pygame as pg
 from pygame.math import Vector2
-from vi import Agent, Simulation
+from vi import Agent, Simulation, HeadlessSimulation
 from vi.config import Config, dataclass, deserialize
 from simulation_vector import SimulationWithVectors
 from math import cos, radians
@@ -20,7 +20,7 @@ SHEEP_COUNT = 0
 @deserialize
 @dataclass
 class FMSConfig(Config):
-    direction_change: int = 100
+    direction_change: int = 10
 
     leo_speed_wander: float = 3.0
     leo_hunt_speed: float = 4.0
@@ -28,7 +28,7 @@ class FMSConfig(Config):
     sheep_speed_wander: float = 1.0
     sheep_hunt_speed: float = 2.0
     sheep_run_speed: float = 5.0
-    sheep_acceleration: float = 0.01
+    sheep_acceleration: float = 0.1
     sheep_reproduce_chance: float = 1.0
     sheep_mating_radius: float = 20.0
 
@@ -37,9 +37,6 @@ class FMSConfig(Config):
 
     sheep_action_weight: float = 0.5
     leopard_action_weight: float = 0.5
-    sheep_a: float = 0.3
-    sheep_c: float = 0.2
-    sheep_s: float = 0.0
     # sheep_vision_field: float = -100
 
     leo_nat_death: float = (10000) ** -1 * 0
@@ -47,31 +44,33 @@ class FMSConfig(Config):
     leo_hunt_timer: int = 30
     leo_stealth: float = 0.01
     leo_eat_speed: float = 0.4  
-    leo_reproduce_timer: int = 5000
+    leo_reproduce_timer: int = 4000
     leo_reproduce_chance: float = 1.0
     leo_hunt_chance: float = 0.1
     leo_energy_gain: float = 1.5
 
-    leo_still_weight: float = 0.001
-    leo_walk_weight: float = 0.0001
+    leo_still_weight: float = 0.0001
+    leo_walk_weight: float = 0.001
 
-    leo_hungry: float = 0.60
+    leo_hungry: float = 1.0
     sheep_hungry: float = 0.70
 
     leo_full: float = 0.95
     sheep_full: float = 0.95
 
     sheep_nat_death: float = (10000) ** -1
-    sheep_reproduce_timer: int = 10
-    sheep_rot_timer: int = 1000
+    sheep_reproduce_timer: int = 1000
+    sheep_rot_timer: int = 300
     sheep_run_timer: int = 100
     sheep_eat_timer: int = 3
+
+    leopard_reproduce_cap: int = 10
 
     sheep_still_weight: float = 0.0005
     sheep_walk_weight: float = 0.0
     sheep_eat_weight: float = 0.04
 
-    sheep_reproduce_thresh: float = 0.3
+    sheep_reproduce_thresh: float = 0.8
     leopard_reproduce_thresh: float = 0.8
 
     grass_still_weight: float = 0.0
@@ -147,7 +146,9 @@ class WanderLeo(LeoAction):
         return
 
     def prob(self, ag):
-        prey = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).filter(lambda sheep: type(sheep.current_action) == DieSheep).first()
+        leopards = ag.in_proximity_accuracy().without_distance().filter_kind(Leopard).collect_set()
+        prey_occupied = [leopard.current_prey for leopard in leopards]
+        prey = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).filter(lambda sheep: type(sheep.current_action) == DieSheep and sheep not in prey_occupied).first()
         if prey is None:
             prey = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).filter(lambda sheep: leo_see_sheep(ag, sheep)).first()
         ag.current_prey = prey
@@ -211,17 +212,17 @@ class EatLeo(LeoAction):
         ag.current_prey.E -= change_E
 
     def switch(self, ag):
+        ag.consumed += 1
         pass
 
     def prob(self, ag):
-        global LEO_COUNT, SHEEP_COUNT, TOTAL_CAP
-        full = ag.E > self.config.leo_full
+        #full = ag.E > self.config.leo_full
         prey_nutritional = ag.current_prey is not None and ag.current_prey.E > 0
         nat_death_p = [DieLeo(), self.config.leo_nat_death]
-        eat_p = [EatLeo(), int(prey_nutritional and not full)]
+        eat_p = [EatLeo(), int(prey_nutritional)]
         wander_p = [WanderLeo(), 1]
-        mate_p = [ReproduceLeo(), int(self.config.leo_reproduce_chance)] \
-            if LEO_COUNT * 10 + SHEEP_COUNT < TOTAL_CAP and ag.E >= self.config.leopard_reproduce_thresh and ag.can_reproduce else [ReproduceLeo(), 0]
+        mate_p = [ReproduceLeo(), self.config.leo_reproduce_chance] \
+            if ag.consumed >= self.config.leopard_reproduce_cap and ag.E >= self.config.leopard_reproduce_thresh and ag.can_reproduce else [ReproduceLeo(), 0]
         return [nat_death_p, eat_p, mate_p, wander_p]
 
 class DieLeo(LeoAction):
@@ -244,6 +245,7 @@ class Leopard(Agent, FMSPriority):
     current_action = WanderLeo()
     E: float = uniform(0.8, 1.0)
     timer: int = 0
+    consumed:  int = 0
 
     death_timer = config.leo_rot_timer
     leo_hunt_timer = config.leo_hunt_timer
@@ -411,7 +413,6 @@ class EatSheep(SheepAction):
         pass
 
     def prob(self, ag):
-        global SHEEP_COUNT, LEO_COUNT, TOTAL_CAP
         full = ag.E > self.config.sheep_full
         prey_nutritional = ag.current_prey is not None and ag.current_prey.E > 0
         nat_death_p = [DieSheep(), self.config.sheep_nat_death]
@@ -423,8 +424,8 @@ class EatSheep(SheepAction):
         wander_p = [WanderSheep(), 1]
         mate = ag.in_proximity_accuracy().without_distance().filter_kind(Sheep).first()
         ag.current_mate = mate
-        mate_p = [ReproduceSheep(), int(self.config.sheep_reproduce_chance)] \
-            if SHEEP_COUNT + 10 * LEO_COUNT < TOTAL_CAP and mate is not None and ag.E >= self.config.sheep_reproduce_thresh and ag.can_reproduce else [ReproduceSheep(), 0]
+        mate_p = [ReproduceSheep(), self.config.sheep_reproduce_chance] \
+            if mate is not None and ag.E >= self.config.sheep_reproduce_thresh and ag.can_reproduce else [ReproduceSheep(), 0]
         #print(ag.can_reproduce, ag.E >= self.config.sheep_reproduce_thresh, mate is not None)
 
         return [nat_death_p, run_p, mate_p, eat_p, wander_p]
@@ -446,12 +447,14 @@ class DieSheep(DieLeo):
 
 class ReproduceSheep(SheepAction):
     def do(self, ag):
+            #print('fuckalert')
         # if ag.current_mate is not None and ag.can_reproduce:
             ag.move = Vector2(0, 0) 
             #ag.E -= 0.1
             # ag.current_mate.E = 0.5
             #print(ag.reproduce().E, ag.E)
             ag.can_reproduce = False
+            ag.reproduce()
             # ag.current_mate.can_reproduce = False
 
         # if ag.reproduce_timer == 0:
@@ -515,7 +518,7 @@ class Sheep(Agent, FMSPriority):
 
 class Grass(Agent):
     config: FMSConfig
-    E: float = 40.0
+    E: float = 10.0
     disp: float = 500.0
 
     def change_position(self):
@@ -536,7 +539,7 @@ class Grass(Agent):
         self.save_data("E", self.E)
         self.save_data("Type", "Grass")
 
-class FMSLive(SimulationWithVectors):
+class FMSLive(HeadlessSimulation):
     tmp: int
 
 config = FMSConfig(
@@ -544,6 +547,7 @@ config = FMSConfig(
             movement_speed=1,
             radius=150,
             seed=1,
+            duration=3000,
         )
 
 def run_simulation(config: FMSConfig) -> pl.DataFrame:
@@ -555,7 +559,7 @@ def run_simulation(config: FMSConfig) -> pl.DataFrame:
         # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
         .batch_spawn_agents(20, Grass, images=['images/green_circle.png'])
         .batch_spawn_agents(100, Sheep, images=['images/sheep.png', 'images/dead_sheep.png'])
-        .batch_spawn_agents(10, Leopard, images=["images/snowleopard .png", "images/dead_snowleopard.png"])
+        .batch_spawn_agents(10, Leopard, images=["images/snowleopard.png", "images/dead_snowleopard.png"])
         .run()
         .snapshots
     )
@@ -564,7 +568,7 @@ def run_simulation(config: FMSConfig) -> pl.DataFrame:
 if __name__ == "__main__":
 
     df = run_simulation(config)
-'''
+
     # Filter the dataframe for 'Leopard' and 'Sheep'
     df_leopard = df.filter(pl.col("Type") == "Leopard")
     df_sheep = df.filter(pl.col("Type") == "Sheep")
@@ -609,4 +613,4 @@ if __name__ == "__main__":
     plt.legend()
 
     plt.show()
-    '''
+    

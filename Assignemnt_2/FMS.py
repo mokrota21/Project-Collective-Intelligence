@@ -16,7 +16,7 @@ class FMSPriority():
         prob_distr = self.current_action.prob(self)
         new_action = self.sample(prob_distr)
         if type(new_action) != type(self.current_action):
-            print(new_action, self.current_action)
+            #print(new_action, self.current_action)
             self.current_action.switch(self)
             self.current_action = new_action
 
