@@ -20,7 +20,7 @@ SHEEP_COUNT = 0
 @deserialize
 @dataclass
 class FMSConfig(Config):
-    direction_change: int = 10
+    direction_change: int = 100
 
     leo_speed_wander: float = 3.0
     leo_hunt_speed: float = 4.0
@@ -44,34 +44,34 @@ class FMSConfig(Config):
     leo_hunt_timer: int = 30
     leo_stealth: float = 0.01
     leo_eat_speed: float = 0.4  
-    leo_reproduce_timer: int = 4000
+    leo_reproduce_timer: int = 0
     leo_reproduce_chance: float = 1.0
-    leo_hunt_chance: float = 0.1
-    leo_energy_gain: float = 1.5
+    leo_hunt_chance: float = 1.0
+    leo_energy_gain: float = 1.2
 
-    leo_still_weight: float = 0.0001
+    leo_still_weight: float = 0.001
     leo_walk_weight: float = 0.001
 
-    leo_hungry: float = 1.0
+    leo_hungry: float = 0.8
     sheep_hungry: float = 0.70
 
     leo_full: float = 0.95
     sheep_full: float = 0.95
 
     sheep_nat_death: float = (10000) ** -1
-    sheep_reproduce_timer: int = 1000
+    sheep_reproduce_timer: int = 850
     sheep_rot_timer: int = 300
     sheep_run_timer: int = 100
     sheep_eat_timer: int = 3
 
-    leopard_reproduce_cap: int = 10
+    leopard_reproduce_cap: int = 5
 
     sheep_still_weight: float = 0.0005
     sheep_walk_weight: float = 0.0
     sheep_eat_weight: float = 0.04
 
-    sheep_reproduce_thresh: float = 0.8
-    leopard_reproduce_thresh: float = 0.8
+    sheep_reproduce_thresh: float = 0.3
+    leopard_reproduce_thresh: float = 0.7
 
     grass_still_weight: float = 0.0
 
@@ -213,7 +213,8 @@ class EatLeo(LeoAction):
 
     def switch(self, ag):
         ag.consumed += 1
-        pass
+        if ag.consumed > self.config.leopard_reproduce_cap:
+            ag.consumed = 1
 
     def prob(self, ag):
         #full = ag.E > self.config.leo_full
@@ -450,7 +451,7 @@ class ReproduceSheep(SheepAction):
             #print('fuckalert')
         # if ag.current_mate is not None and ag.can_reproduce:
             ag.move = Vector2(0, 0) 
-            #ag.E -= 0.1
+            ag.E -= 0.2
             # ag.current_mate.E = 0.5
             #print(ag.reproduce().E, ag.E)
             ag.can_reproduce = False
@@ -547,7 +548,7 @@ config = FMSConfig(
             movement_speed=1,
             radius=150,
             seed=1,
-            duration=3000,
+            duration=5000,
         )
 
 def run_simulation(config: FMSConfig) -> pl.DataFrame:
