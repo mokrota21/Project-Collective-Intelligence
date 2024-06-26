@@ -44,7 +44,7 @@ class FMSConfig(Config):
     leo_hunt_timer: int = 30
     leo_stealth: float = 0.01
     leo_eat_speed: float = 0.4  
-    leo_reproduce_timer: int = 0
+    leo_reproduce_timer: int = 1000
     leo_reproduce_chance: float = 1.0
     leo_hunt_chance: float = 1.0
     leo_energy_gain: float = 1.2
@@ -52,26 +52,26 @@ class FMSConfig(Config):
     leo_still_weight: float = 0.001
     leo_walk_weight: float = 0.001
 
-    leo_hungry: float = 0.8
+    leo_hungry: float = 0.60
     sheep_hungry: float = 0.70
 
     leo_full: float = 0.95
     sheep_full: float = 0.95
 
     sheep_nat_death: float = (10000) ** -1
-    sheep_reproduce_timer: int = 850
+    sheep_reproduce_timer: int = 1425
     sheep_rot_timer: int = 300
     sheep_run_timer: int = 100
-    sheep_eat_timer: int = 3
+    sheep_eat_timer: int = 10
 
-    leopard_reproduce_cap: int = 5
+    leopard_reproduce_cap: int = 3
 
     sheep_still_weight: float = 0.0005
     sheep_walk_weight: float = 0.0
     sheep_eat_weight: float = 0.04
 
     sheep_reproduce_thresh: float = 0.3
-    leopard_reproduce_thresh: float = 0.7
+    leopard_reproduce_thresh: float = 0.6
 
     grass_still_weight: float = 0.0
 
@@ -548,7 +548,7 @@ config = FMSConfig(
             movement_speed=1,
             radius=150,
             seed=1,
-            duration=5000,
+            duration=10000,
         )
 
 def run_simulation(config: FMSConfig) -> pl.DataFrame:
