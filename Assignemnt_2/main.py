@@ -520,7 +520,7 @@ class Sheep(Agent, FMSPriority):
 class Grass(Agent):
     config: FMSConfig
     E: float = 10.0
-    disp: float = 500.0
+    disp: float = 200.0
 
     def change_position(self):
         global SHEEP_COUNT
@@ -551,29 +551,44 @@ config = FMSConfig(
             duration=10000,
         )
 
-def run_simulation(config: FMSConfig) -> pl.DataFrame:
+def run_simulation(config: FMSConfig, grass_count: int) -> pl.DataFrame:
     return (
         FMSLive(
             config
         )
-        # .spawn_site("images/circle2.png", config.window.as_tuple()[0] / 4, config.window.as_tuple()[0] / 4)
-        # .spawn_site("images/site1.png", config.window.as_tuple()[0] / 4 * 3, config.window.as_tuple()[0] / 4)
-        .batch_spawn_agents(20, Grass, images=['images/green_circle.png'])
+        .batch_spawn_agents(grass_count, Grass, images=['images/green_circle.png'])
         .batch_spawn_agents(100, Sheep, images=['images/sheep.png', 'images/dead_sheep.png'])
         .batch_spawn_agents(10, Leopard, images=["images/snowleopard.png", "images/dead_snowleopard.png"])
         .run()
         .snapshots
     )
 
-
 if __name__ == "__main__":
+    grass_counts = [5, 10, 15]
+    colors = ['red', 'green', 'blue']
 
-    df = run_simulation(config)
+    for i, grass_count in enumerate(grass_counts):
+        df = run_simulation(config, grass_count)
 
-    # Filter the dataframe for 'Leopard' and 'Sheep'
-    df_leopard = df.filter(pl.col("Type") == "Leopard")
-    df_sheep = df.filter(pl.col("Type") == "Sheep")
+        # Filter the dataframe for 'Leopard' and 'Sheep'
+        df_leopard = df.filter(pl.col("Type") == "Leopard")
+        df_sheep = df.filter(pl.col("Type") == "Sheep")
 
+        # Calculate the count of each type for each frame
+        df_leopard_count = df.filter(pl.col("Type") == "Leopard").group_by("frame").agg(count=pl.col("Type").count()).sort("frame")
+        df_sheep_count = df.filter(pl.col("Type") == "Sheep").group_by("frame").agg(count=pl.col("Type").count()).sort("frame")
+
+        # Plot using matplotlib
+        plt.plot(df_leopard_count['frame'], df_leopard_count['count'], color=colors[i], label=f'Leopard {grass_count}')
+        plt.plot(df_sheep_count['frame'], df_sheep_count['count'], color=colors[i], label=f'Sheep {grass_count}')
+
+    plt.xlabel('Frame')
+    plt.ylabel('Population')
+    plt.title('Population of Sheep and Leopards over Frames')
+    plt.legend()
+
+    plt.show()
+'''
     # Calculate the average energy for each frame
     df_leopard_e = df_leopard.group_by("frame").agg(avg_E=pl.col("E").mean()).sort("frame")
     df_sheep_e = df_sheep.group_by("frame").agg(avg_E=pl.col("E").mean()).sort("frame")
@@ -599,19 +614,6 @@ if __name__ == "__main__":
     plt.title('Average Energy of Grass over Frames')
 
     plt.show()
+'''
 
-    # Calculate the count of each type for each frame
-    df_leopard_count = df.filter(pl.col("Type") == "Leopard").group_by("frame").agg(count=pl.col("Type").count()).sort("frame")
-    df_sheep_count = df.filter(pl.col("Type") == "Sheep").group_by("frame").agg(count=pl.col("Type").count()).sort("frame")
-
-    # Plot using matplotlib
-    plt.plot(df_leopard_count['frame'], df_leopard_count['count'], label='Leopard')
-    plt.plot(df_sheep_count['frame'], df_sheep_count['count'], label='Sheep')
-
-    plt.xlabel('Frame')
-    plt.ylabel('Population')
-    plt.title('Population of Sheep and Leopards over Frames')
-    plt.legend()
-
-    plt.show()
     
